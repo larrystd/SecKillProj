@@ -1,8 +1,8 @@
-package httptest
+package test
 
 import (
 	"SecKill/api"
-	"SecKill/data"
+	"SecKill/dao"
 	"SecKill/model"
 	"net/http"
 	"strconv"
@@ -35,7 +35,7 @@ func testUserAuthenticationFlow(e *httpexpect.Expect) {
 }
 
 func getCouponUnauthorized(e *httpexpect.Expect, username string, page int) {
-	jsonObject := e.GET(getCouponPath, username).
+	jsonObject := e.GET(listCouponUrl, username).
 		WithQuery(pageQueryKey, page).
 		Expect().
 		Status(http.StatusUnauthorized).JSON().Object()
@@ -43,13 +43,12 @@ func getCouponUnauthorized(e *httpexpect.Expect, username string, page int) {
 	jsonObject.Value(api.DataKey).Equal([]model.Coupon{})
 }
 
-
 func testCouponManagement(e *httpexpect.Expect) {
 	// Test coupon lifecycle: creation, retrieval, and verification
 	customerAuthToken := doLogin(e, demoCustomerName, demoPassword, model.NormalCustomer)
 
 	verifyEmptyCouponList := func(username string, page, status int) {
-		e.GET(getCouponPath, username).
+		e.GET(listCouponUrl, username).
 			WithHeader("Authorization", customerAuthToken).
 			WithQuery(pageQueryKey, page).
 			Expect().
@@ -62,10 +61,9 @@ func testCouponManagement(e *httpexpect.Expect) {
 	verifyEmptyCouponList(demoSellerName, -1, http.StatusNoContent)
 	verifyEmptyCouponList(demoSellerName, 0, http.StatusNoContent)
 
-
 	// Seller adds new coupon
 	sellerAuthToken := doLogin(e, demoSellerName, demoPassword, model.NormalSeller)
-	e.POST(addCouponPath, demoSellerName).
+	e.POST(addCouponUrl, demoSellerName).
 		WithHeader("Authorization", sellerAuthToken).
 		WithJSON(AddCouponForm{
 			demoCouponName,
@@ -79,7 +77,7 @@ func testCouponManagement(e *httpexpect.Expect) {
 
 	// Verify coupon list is no longer empty
 	verifyNonEmptyCouponList := func(username string, page, status int) {
-		e.GET(getCouponPath, username).
+		e.GET(listCouponUrl, username).
 			WithHeader("Authorization", customerAuthToken).
 			WithQuery(pageQueryKey, page).
 			Expect().
@@ -91,7 +89,7 @@ func testCouponManagement(e *httpexpect.Expect) {
 
 	// Verify coupon schema
 	verifyCouponSchema := func(username string, page int) {
-		e.GET(getCouponPath, username).
+		e.GET(listCouponUrl, username).
 			WithHeader("Authorization", customerAuthToken).
 			WithQuery(pageQueryKey, page).
 			Expect().JSON().Schema(sellerSchema)
@@ -106,7 +104,7 @@ func testCouponAcquisition(e *httpexpect.Expect, initialCouponAmount int) {
 
 	// Helper function to attempt coupon acquisition
 	attemptCouponAcquisition := func(username string, couponName string, expectedStatus int) {
-		e.PATCH(fetchCouponPath, username, couponName).
+		e.PATCH(fetchCouponUrl, username, couponName).
 			WithHeader("Authorization", customerAuthToken).
 			Expect().
 			Status(expectedStatus)
@@ -114,7 +112,7 @@ func testCouponAcquisition(e *httpexpect.Expect, initialCouponAmount int) {
 
 	// Helper function to verify remaining coupon stock
 	verifyRemainingCoupons := func(username string, page int, index int, expectedRemaining int) {
-		e.GET(getCouponPath, username).
+		e.GET(listCouponUrl, username).
 			WithHeader("Authorization", sellerAuthToken).
 			WithQuery(pageQueryKey, page).
 			Expect().
@@ -126,7 +124,7 @@ func testCouponAcquisition(e *httpexpect.Expect, initialCouponAmount int) {
 
 	// Helper function to verify customer's coupon list
 	verifyCustomerCoupons := func(page int, expectedStatus int) {
-		e.GET(getCouponPath, demoCustomerName).
+		e.GET(listCouponUrl, demoCustomerName).
 			WithHeader("Authorization", customerAuthToken).
 			WithQuery(pageQueryKey, page).
 			Expect().
@@ -152,7 +150,7 @@ func testCouponAcquisition(e *httpexpect.Expect, initialCouponAmount int) {
 // normal test
 func TestNormal(t *testing.T) {
 	_, e := startServer(t)
-	defer data.Close()
+	defer dao.Close()
 
 	// Setup test environment, register seller and customer
 	registerDemoUsers(e)

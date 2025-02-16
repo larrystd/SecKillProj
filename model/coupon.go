@@ -10,44 +10,44 @@ type Coupon struct {
 	Description string `gorm:"type:varchar(60)"`
 }
 
-type ReqCoupon struct {
+type CouponRequest struct {
 	Name        string
 	Amount      string
 	Description string
 	Stock       string
 }
 
-type ResCoupon struct {
+type CouponResponse struct {
 	Name        string  `json:"name"`
 	Stock       float64 `json:"stock"`
 	Description string  `json:"description"`
 }
 
-type SellerResCoupon struct {
-	ResCoupon
+type SellerCouponRes struct {
+	CouponResponse
 	Amount int64 `json:"amount"`
 	Left   int64 `json:"left"`
 }
 
-type CustomerResCoupon struct {
-	ResCoupon
+type CustomerCouponRes struct {
+	CouponResponse
 }
 
-func ParseSellerResCoupons(coupons []Coupon) []SellerResCoupon {
-	var sellerCoupons []SellerResCoupon
+func ParseSellerCoupons(coupons []Coupon) []SellerCouponRes {
+	var sellerCoupons []SellerCouponRes
 	for _, coupon := range coupons {
 		sellerCoupons = append(sellerCoupons,
-			SellerResCoupon{ResCoupon{coupon.CouponName, coupon.Stock, coupon.Description},
+			SellerCouponRes{CouponResponse{coupon.CouponName, coupon.Stock, coupon.Description},
 				coupon.Amount, coupon.Left})
 	}
 	return sellerCoupons
 }
 
-func ParseCustomerResCoupons(coupons []Coupon) []CustomerResCoupon {
-	var sellerCoupons []CustomerResCoupon
+func ParseCustomerCoupons(coupons []Coupon) []CustomerCouponRes {
+	var sellerCoupons []CustomerCouponRes
 	for _, coupon := range coupons {
 		sellerCoupons = append(sellerCoupons,
-			CustomerResCoupon{ResCoupon{coupon.CouponName, coupon.Stock, coupon.Description}})
+			CustomerCouponRes{CouponResponse{coupon.CouponName, coupon.Stock, coupon.Description}})
 	}
 	return sellerCoupons
 }

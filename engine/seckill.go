@@ -3,7 +3,6 @@ package engine
 import (
 	"SecKill/api"
 	"SecKill/conf"
-	"SecKill/data"
 	"SecKill/middleware/jwt"
 	"SecKill/model"
 	"encoding/gob"
@@ -13,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Visible for test
 const SessionHeaderKey = "Authorization"
 
 func SeckillEngine() *gin.Engine {
@@ -32,27 +30,15 @@ func SeckillEngine() *gin.Engine {
 	userRouter.POST("", api.RegisterUser)
 	userRouter.Use(jwt.JWTAuth())
 	{
-		userRouter.PATCH("/:username/coupons/:name", api.FetchCoupon)
-		userRouter.GET("/:username/coupons", api.GetCoupons)
-		userRouter.POST("/:username/coupons", api.AddCoupon)
+		userRouter.PATCH("/:username/coupons/fetch/:name", api.FetchCoupon)
+		userRouter.GET("/:username/coupons/list", api.ListCoupons)
+		userRouter.POST("/:username/coupons/add", api.AddCoupon)
 	}
 
 	authRouter := router.Group("/api/auth")
 	{
 		authRouter.POST("", api.LoginAuth)
 		authRouter.POST("/logout", api.Logout)
-	}
-
-	testRouter := router.Group("/test")
-	{
-		testRouter.GET("/", api.Welcome)
-		testRouter.GET("/flush", func(context *gin.Context) {
-			if _, err := data.FlushAll(); err != nil {
-				println("Error when flushAll. " + err.Error())
-			} else {
-				println("Flushall succeed.")
-			}
-		})
 	}
 
 	api.RunSecKillConsumer()

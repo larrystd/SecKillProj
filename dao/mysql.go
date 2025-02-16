@@ -1,4 +1,4 @@
-package data
+package dao
 
 import (
 	"SecKill/conf"
@@ -59,8 +59,4 @@ func initMysql(config conf.AppConfig) {
 	Db.Model(coupon).AddUniqueIndex("coupon_index", "username", "coupon_name")
 
 	log.Println("---Mysql connection is initialized.---")
-
-	// Db.Model(credit_card).
-	//	 AddForeignKey("owner_id", "users(id)", "RESTRICT", "RESTRICT").
-	//	 AddUniqueIndex("unique_owner", "owner_id")
 }

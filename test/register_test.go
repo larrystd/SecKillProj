@@ -1,8 +1,8 @@
-package httptest
+package test
 
 import (
 	"SecKill/api"
-	"SecKill/data"
+	"SecKill/dao"
 	"SecKill/engine"
 	"SecKill/model"
 	"net/http"
@@ -119,7 +119,7 @@ func testDuplicateRegistration(e *httpexpect.Expect) {
 
 func TestRegistrationScenarios(t *testing.T) {
 	_, e := startServer(t)
-	defer data.Close()
+	defer dao.Close()
 
 	// Execute test scenarios
 	testInvalidRegistrationAttempts(e)

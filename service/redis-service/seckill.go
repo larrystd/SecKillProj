@@ -1,7 +1,7 @@
 package redisService
 
 import (
-	"SecKill/data"
+	"SecKill/dao"
 	"fmt"
 
 	"github.com/prometheus/common/log"
@@ -64,9 +64,9 @@ func IsRedisEvalError(err error) bool {
 }
 
 func CacheAtomicSecKill(userName string, sellerName string, couponName string) (int64, error) {
-	userHasCouponsKey := getHasCouponsKeyByName(userName)
-	couponKey := getCouponKeyByName(couponName)
-	res, err := data.EvalSHA(secKillSHA, []string{userHasCouponsKey, couponName, couponKey})
+	userHasCouponsKey := generateUserCouponKey(userName)
+	couponKey := generateCouponInfoKey(couponName)
+	res, err := dao.EvalSHA(secKillSHA, []string{userHasCouponsKey, couponName, couponKey})
 	if err != nil {
 		return -1, redisEvalError{}
 	}
@@ -76,14 +76,14 @@ func CacheAtomicSecKill(userName string, sellerName string, couponName string) (
 		return -1, redisEvalError{}
 	}
 	// error handle
-	switch {
-	case couponLeftRes == -1:
+	switch couponLeftRes {
+	case -1:
 		return -1, userHasCouponError{userName, couponName}
-	case couponLeftRes == -2:
+	case -2:
 		return -1, noSuchCouponError{sellerName, couponName}
-	case couponLeftRes == -3:
+	case -3:
 		return -1, noCouponLeftError{sellerName, couponName}
-	case couponLeftRes == 1:
+	case 1:
 		return couponLeftRes, nil
 	default:
 		{

@@ -1,8 +1,8 @@
 package redisService
 
 import (
-	"SecKill/api/dbService"
-	"SecKill/data"
+	"SecKill/dao"
+	dbService "SecKill/service/db-service"
 	"log"
 )
 
@@ -12,7 +12,7 @@ const secKillScript = `
     -- KEYS[2]: couponName   "{couponName}"
     -- KEYS[3]: couponKey    "{couponName}-info"
 
-    -- Check if coupon exists and is cached
+    -- Check if coupon left
 	local couponLeft = redis.call("hget", KEYS[3], "left");
 	if (couponLeft == false)
 	then
@@ -30,7 +30,7 @@ const secKillScript = `
 		return -1;
 	end
 
-    -- User gets the coupon --
+    -- Let User get a coupon --
 	redis.call("hset", KEYS[3], "left", couponLeft - 1);
 	redis.call("SADD", KEYS[1], KEYS[2]);
 	return 1;
@@ -38,14 +38,14 @@ const secKillScript = `
 
 var secKillSHA string // SHA expression of secKillScript
 
-func preHeatKeys() {
-	coupons, err := dbService.GetAllCoupons()
+func preHeatRedis() {
+	coupons, err := dbService.GetCouponsInfoFromDB()
 	if err != nil {
 		panic("Error when getting all coupons." + err.Error())
 	}
 
 	for _, coupon := range coupons {
-		err := CacheCouponAndHasCoupon(coupon)
+		err := UpdateCouponCache(coupon)
 		if err != nil {
 			panic("Error while setting redis keys of coupons. " + err.Error())
 		}
@@ -54,6 +54,6 @@ func preHeatKeys() {
 }
 
 func init() {
-	secKillSHA = data.PrepareScript(secKillScript)
-	preHeatKeys()
+	secKillSHA = dao.PrepareScript(secKillScript)
+	preHeatRedis()
 }

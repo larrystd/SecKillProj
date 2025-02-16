@@ -1,4 +1,4 @@
-package httptest
+package test
 
 import (
 	"SecKill/api"
@@ -9,9 +9,9 @@ import (
 	"github.com/gavv/httpexpect"
 )
 
-const addCouponPath = "/api/users/{username}/coupons"
-const getCouponPath = "/api/users/{username}/coupons"
-const fetchCouponPath = "/api/users/{username}/coupons/{name}"
+const addCouponUrl = "/api/users/{username}/coupons/add"
+const listCouponUrl = "/api/users/{username}/coupons/list"
+const fetchCouponUrl = "/api/users/{username}/coupons/fetch/{name}"
 
 const pageQueryKey = "page"
 

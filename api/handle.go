@@ -1,10 +1,10 @@
 package api
 
 import (
-	"SecKill/api/redisService"
-	"SecKill/data"
-	myjwt "SecKill/middleware/jwt"
+	"SecKill/dao"
+	"SecKill/middleware/jwt"
 	"SecKill/model"
+	redisService "SecKill/service/redis-service"
 	"log"
 	"net/http"
 	"strconv"
@@ -19,13 +19,12 @@ const DataKey = "data"
 
 func FetchCoupon(ctx *gin.Context) {
 	// check authorized
-	claims := ctx.MustGet("claims").(*myjwt.CustomClaims)
+	claims := ctx.MustGet("claims").(*jwt.CustomClaims)
 	if claims == nil {
 		log.Printf("context claims is nil")
 		ctx.JSON(http.StatusUnauthorized, gin.H{ErrMsgKey: "Not Authorized."})
 		return
 	}
-
 	if claims.Kind == "saler" {
 		ctx.JSON(http.StatusUnauthorized, gin.H{ErrMsgKey: "Sellers aren't allowed to get coupons."})
 		return
@@ -34,23 +33,19 @@ func FetchCoupon(ctx *gin.Context) {
 	paramSellerName := ctx.Param("username")
 	paramCouponName := ctx.Param("name")
 	// check coupon left
-	_, err := redisService.CacheAtomicSecKill(claims.Username, paramSellerName, paramCouponName)
-	if err == nil {
-		coupon := redisService.GetCoupon(paramCouponName)
-		SecKillChannel <- secKillMessage{claims.Username, coupon}
-		ctx.JSON(http.StatusCreated, gin.H{ErrMsgKey: ""})
-		return
-	} else {
+	if _, err := redisService.CacheAtomicSecKill(claims.Username, paramSellerName, paramCouponName); err != nil {
 		if redisService.IsRedisEvalError(err) {
-			log.Printf("Server error" + err.Error())
+			log.Println("Server error" + err.Error())
 			ctx.JSON(http.StatusInternalServerError, gin.H{ErrMsgKey: err.Error()})
 			return
-		} else {
-			log.Printf("Fail to fetch coupon. " + err.Error())
-			ctx.JSON(http.StatusNoContent, gin.H{})
-			return
 		}
+		log.Println("Fail to fetch coupon. " + err.Error())
+		ctx.JSON(http.StatusNoContent, gin.H{})
+		return
 	}
+	coupon := redisService.GetCouponFromRedis(paramCouponName)
+	secKillChannel <- secKillMessage{claims.Username, coupon}
+	ctx.JSON(http.StatusCreated, gin.H{ErrMsgKey: ""})
 }
 
 const (
@@ -88,14 +83,13 @@ func getDataStatusCode(len int) int {
 	return http.StatusOK
 }
 
-func GetCoupons(ctx *gin.Context) {
-	claims := ctx.MustGet("claims").(*myjwt.CustomClaims)
+func ListCoupons(ctx *gin.Context) {
+	claims := ctx.MustGet("claims").(*jwt.CustomClaims)
 	if claims == nil {
 		log.Println("claims is nil.")
 		ctx.JSON(http.StatusUnauthorized, gin.H{ErrMsgKey: "Not Authorized."})
 		return
 	}
-
 	queryUserName, queryPage := ctx.Param("username"), ctx.Query("page")
 
 	var page int64
@@ -111,23 +105,21 @@ func GetCoupons(ctx *gin.Context) {
 			return
 		}
 	}
-
 	page = tmpPage - 1
 
 	queryUser := model.User{Username: queryUserName}
-	queryErr := data.Db.Where(&queryUser).
-		First(&queryUser).Error
+	queryErr := dao.Db.Where(&queryUser).First(&queryUser).Error
 	if queryErr != nil {
 		if gorm.IsRecordNotFoundError(queryErr) {
 			log.Println("Record not found.")
 			ctx.JSON(http.StatusBadRequest, gin.H{ErrMsgKey: "Record not found."})
-		} else {
-			log.Println("Query error.")
-			ctx.JSON(http.StatusBadRequest, gin.H{ErrMsgKey: "Query error."})
+			return
 		}
+		log.Println("Query error.")
+		ctx.JSON(http.StatusBadRequest, gin.H{ErrMsgKey: "Query error."})
 		return
 	}
-
+	// custom query its coupons info
 	if queryUserName == claims.Username {
 		var allCoupons []model.Coupon
 		var err error
@@ -141,18 +133,18 @@ func GetCoupons(ctx *gin.Context) {
 		coupons := getValidCouponSlice(allCoupons, page)
 
 		if queryUser.IsSeller() {
-			sellerCoupons := model.ParseSellerResCoupons(coupons)
+			sellerCoupons := model.ParseSellerCoupons(coupons)
 			statusCode := getDataStatusCode(len(sellerCoupons))
 			ctx.JSON(statusCode, gin.H{ErrMsgKey: "", DataKey: sellerCoupons})
 			return
 		} else if queryUser.IsCustomer() {
-			customerCoupons := model.ParseCustomerResCoupons(coupons)
+			customerCoupons := model.ParseCustomerCoupons(coupons)
 			statusCode := getDataStatusCode(len(customerCoupons))
 			ctx.JSON(statusCode, gin.H{ErrMsgKey: "", DataKey: customerCoupons})
 			return
 		}
 	}
-	// seller can check comsumer coupon info
+	// seller query comsumer coupon info
 	if queryUser.IsSeller() {
 		var allCoupons []model.Coupon
 		var err error
@@ -163,17 +155,17 @@ func GetCoupons(ctx *gin.Context) {
 		}
 		coupons := getValidCouponSlice(allCoupons, page)
 
-		sellerCoupons := model.ParseSellerResCoupons(coupons)
+		sellerCoupons := model.ParseSellerCoupons(coupons)
 		statusCode := getDataStatusCode(len(sellerCoupons))
 		ctx.JSON(statusCode, gin.H{ErrMsgKey: "", DataKey: sellerCoupons})
 		return
 	}
-	log.Println("Cannot check other customer.")
+	log.Printf("Username check failed, %v\n.", queryUserName)
 	ctx.JSON(http.StatusUnauthorized, gin.H{ErrMsgKey: "Cannot check other customer.", DataKey: []model.Coupon{}})
 }
 
 func AddCoupon(ctx *gin.Context) {
-	claims := ctx.MustGet("claims").(*myjwt.CustomClaims)
+	claims := ctx.MustGet("claims").(*jwt.CustomClaims)
 	if claims == nil {
 		log.Println("Not Authorized.")
 		ctx.JSON(http.StatusUnauthorized, gin.H{ErrMsgKey: "Not Authorized."})
@@ -187,17 +179,17 @@ func AddCoupon(ctx *gin.Context) {
 	}
 
 	paramUserName := ctx.Param("username")
-	var postCoupon model.ReqCoupon
+	var couponRequest model.CouponRequest
 	var err error
-	if err := ctx.BindJSON(&postCoupon); err != nil {
+	if err := ctx.BindJSON(&couponRequest); err != nil {
 		log.Println("Only receive JSON format.")
 		ctx.JSON(http.StatusBadRequest, gin.H{ErrMsgKey: "Only receive JSON format."})
 		return
 	}
-	couponName := postCoupon.Name
-	formAmount := postCoupon.Amount
-	description := postCoupon.Description
-	formStock := postCoupon.Stock
+	couponName := couponRequest.Name
+	formAmount := couponRequest.Amount
+	description := couponRequest.Description
+	formStock := couponRequest.Stock
 	if claims.Username != paramUserName {
 		log.Println("Cannot create coupons for other users.")
 		ctx.JSON(http.StatusUnauthorized, gin.H{ErrMsgKey: "Cannot create coupons for other users."})
@@ -223,14 +215,14 @@ func AddCoupon(ctx *gin.Context) {
 		Description: description,
 	}
 
-	err = data.Db.Create(&coupon).Error
+	err = dao.Db.Create(&coupon).Error
 	if err != nil {
 		log.Println("Create failed. Maybe (username,coupon name) duplicates")
 		ctx.JSON(http.StatusBadRequest, gin.H{ErrMsgKey: "Create failed. Maybe (username,coupon name) duplicates"})
 		return
 	}
 
-	if err = redisService.CacheCouponAndHasCoupon(coupon); err != nil {
+	if err = redisService.UppdateCouponCache(coupon); err != nil {
 		log.Println("Create Cache failed. ", err.Error())
 		ctx.JSON(http.StatusInternalServerError, gin.H{ErrMsgKey: "Create Cache failed. " + err.Error()})
 		return
@@ -246,6 +238,7 @@ func RegisterUser(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{ErrMsgKey: "Only receive JSON format."})
 		return
 	}
+	// TODO: 使用参数校验库优化校验
 	if len(postUser.Username) < model.MinUserNameLen {
 		log.Println("User name too short.")
 		ctx.JSON(http.StatusBadRequest, gin.H{ErrMsgKey: "User name too short."})
@@ -268,7 +261,7 @@ func RegisterUser(ctx *gin.Context) {
 	}
 
 	user := model.User{Username: postUser.Username, Kind: postUser.Kind, Password: model.GetMD5(postUser.Password)}
-	if data.Db.Create(&user).Error == nil {
+	if dao.Db.Create(&user).Error == nil {
 		ctx.JSON(http.StatusOK, gin.H{ErrMsgKey: ""})
 	} else {
 		log.Println("Insert user failed. Maybe user name duplicates.")
